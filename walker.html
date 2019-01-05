@@ -1,0 +1,697 @@
+<script>	
+/**
+run Canvas.startOn(0);
+**/
+window.onload = function () {
+    Application.main();
+};
+
+Application = function () {
+    var self = this;
+
+    this.man = null;
+
+    this.main = function () {
+        Canvas.init();
+		Canvas.offsetX = 100;
+		Canvas.offsetY = 30;
+        self.init();
+    };
+
+    this.init = function () {
+        self.man = new PlayLayer();
+    };
+};
+
+Application = new Application;
+
+Canvas = function () {
+	var self = this;
+    var canvas;
+    var context;
+
+	this.offsetX = 0;
+	this.offsetY = 0;
+	
+    var sprites = [];
+    var anims;
+
+    this.init = function () {
+        canvas = document.getElementById('myCanvas');
+        context = canvas.getContext('2d');
+        var interval = 1000 / 20 / 1;
+        //var interval = 1;
+        setInterval(processAnimate, interval);
+    };
+
+    this.loadAnims = function (animsToLoad, callback) {
+        var imgSrcList;
+        imgSrcList = [];
+
+        animsToLoad.forEach(function (anim) {
+            anim.imgs = [];
+            if (!anim.step) anim.step = 1;
+            for (var i = 1; i <= anim.imgsCount; i++) {
+                for (var j = 0; j < anim.step; j++) {
+                    anim.imgs.push(anim.imgsPrefix + '_' + i + '.png');
+                }
+            }
+            anim.imgs.forEach(function (src) {
+                imgSrcList.push(src);
+            });
+        });
+
+        var cnt;
+        cnt = 0;
+        imgSrcList.forEach(function (src) {
+            loadImage(src, function () {
+                cnt++;
+                if (cnt == imgSrcList.length) {
+                    console.log('images Completed! ' + cnt);
+                    callback();
+                }
+            });
+        });
+
+        anims = animsToLoad;
+        console.log('anims load complete');
+    };
+
+    this.createSprite = function (params) {
+        var sprite;
+        sprite = {};
+        sprite.animate = animateSprite;
+        sprites.push(sprite);
+        return sprite;
+    };
+
+    this.redraw = function () {
+        //context.clearRect(0, 0, 1000, 1000);
+		context.fillStyle="#fafaff";
+		context.fillRect(0,0,1000,1000,3);
+        sprites.forEach(function (sprite) {
+            drawSprite(sprite);
+        });
+    };
+
+    var currentTick = 0;
+    var skipMode = false;
+    var skipFrames = 0;
+    var stopOnFrameNumber = false;
+
+    this.startOn = function (framesCount) {
+        skipMode = true;
+        skipFrames = framesCount;
+        if (currentTick < skipFrames) {
+            while (currentTick < skipFrames || currentTick == stopOnFrameNumber) {
+                processAnimate();
+            }
+        }
+    };
+
+    this.stopOn = function (frameNumber) {
+        stopOnFrameNumber = frameNumber;
+    };
+
+    var drawSprite = function (sprite) {
+        var image;
+        image = getImage(sprite.img);
+        if (image) {
+            context.drawImage(image, self.offsetX + sprite.x + sprite.offsetX, self.offsetY + sprite.y + sprite.offsetY);
+        }
+    };
+
+    var imageCache = [];
+
+    var loadImage = function (src, callback) {
+        var image;
+        image = new Image();
+        image.onload = function () {
+            imageCache[src] = image;
+            callback();
+        };
+        image.src = src;
+    };
+
+    var getImage = function (src) {
+        if (src == undefined) return null;
+        if (imageCache[src]) {
+            return imageCache[src];
+        } else {
+            loadImage(src, function () {
+                Canvas.redraw();
+            });
+            return null;
+        }
+        return null;
+    };
+
+    var animateSprite = function (stack) {
+        if (stack) {
+            this.animateStack = stack;
+            this.animateStack.index = 0;
+        }
+        var frame = this.animateStack[this.animateStack.index];
+        if (frame) {
+            if (frame.x) this.x = frame.x;
+            if (frame.y) this.y = frame.y;
+            this.animateStep = 0;
+            this.animateId = this.animateStack[this.animateStack.index].id;
+            this.animateCountDown = this.animateStack[this.animateStack.index].repeat;
+            if (this.animateCountDown == undefined) {
+                this.animateCountDown = 0;
+            } else {
+                this.animateCountDown--;
+            }
+        } else {
+            this.animateId = null;
+        }
+    };
+
+    var processAnimate = function () {
+        if (currentTick == stopOnFrameNumber) {
+            return;
+        }
+        currentTick++;
+        sprites.forEach(function (sprite) {
+            if (sprite.animateId) {
+                var anim = anims[sprite.animateId];
+                var frame = sprite.animateStack[sprite.animateStack.index];
+                if (anim.Vx) sprite.x += anim.Vx;
+                if (anim.Vy) sprite.y += anim.Vy;
+                if (frame.Vx) sprite.x += frame.Vx;
+                if (frame.Vy) sprite.y += frame.Vy;
+                if (frame.YReflect) sprite.YReflect = true; else sprite.YReflect = false;
+                if (sprite.animateId != 1000002) {
+                    sprite.img = anim.imgs[sprite.animateStep];
+                    sprite.offsetX = anim.offsetX ? anim.offsetX : 0;
+                    sprite.offsetY = anim.offsetY ? anim.offsetY : 0;
+                }
+                sprite.animateStep++;
+                if (sprite.animateStep == anim.imgs.length) {
+                    if (sprite.animateCountDown == 0) {
+                        sprite.animateStack.index++;
+                        sprite.animate(anim.nextAnimateId);
+                    } else {
+                        sprite.animateCountDown--;
+                        sprite.animateStep = 0;
+                    }
+                }
+            }
+        });
+        if (skipMode) {
+            if (currentTick >= skipFrames) {
+                skipMode = false;
+            }
+        } else {
+            Canvas.redraw();
+        }
+    };
+};
+
+Canvas = new Canvas;
+
+PlayLayer = function (params) {
+    var self = this;
+
+    var anims = [];
+
+    var ANIM_PAUSE = 1000001;
+    var ANIM_STOP = 1000002;
+
+    var ANIM_MAN_LEFT_HAND_UP = 1;
+    var ANIM_MAN_LEFT_HAND_UP_HELLO = 2;
+    var ANIM_MAN_LEFT_HAND_DOWN = 3;
+    var ANIM_MAN_TURN_CENTER_TO_RIGHT = 4;
+    var ANIM_MAN_TURN_RIGHT_TO_CENTER = 5;
+    var ANIM_MAN_TURN_CENTER_TO_LEFT = 6;
+    var ANIM_MAN_TURN_LEFT_TO_CENTER = 7;
+    var ANIM_MAN_GO_RIGHT_START = 8;
+    var ANIM_MAN_GO_RIGHT = 9;
+    var ANIM_MAN_GO_RIGHT_STOP = 10;
+    var ANIM_MAN_GO_LEFT_START = 11;
+    var ANIM_MAN_GO_LEFT = 12;
+    var ANIM_MAN_GO_LEFT_STOP = 13;
+    var ANIM_MAN_CREATE_DRAGON_START = 14;
+    var ANIM_MAN_CREATE_DRAGON = 15;
+    var ANIM_MAN_CREATE_DRAGON_STOP = 16;
+    var ANIM_MAN_CREATE_BALL_START = 17;
+    var ANIM_MAN_CREATE_BALL = 18;
+    var ANIM_MAN_CREATE_BALL_STOP = 19;
+    var ANIM_MAN_STAND = 20;
+    var ANIM_MAN_STAND_LEFT = 21;
+    var ANIM_MAN_STAND_RIGHT = 22;
+    var ANIM_MAN_GO_DOWN = 23;
+    var ANIM_MAN_KICK_THE_BALL = 24;
+	var ANIM_MAN_CAST_LEFT_START = 25;
+    var ANIM_MAN_CAST_LEFT = 26;
+    var ANIM_MAN_CAST_LEFT_STOP = 27;
+
+    var ANIM_TEXT_HELLO_START = 102;
+    var ANIM_TEXT_HELLO_HOLD = 103;
+    var ANIM_TEXT_HELLO_FINISH = 104;
+    var ANIM_TEXT_I_WONNA_CREATE_GAMES_START = 105;
+    var ANIM_TEXT_I_WONNA_CREATE_GAMES_HOLD = 106;
+    var ANIM_TEXT_I_WONNA_CREATE_GAMES_FINISH = 107;
+    var ANIM_TEXT_I_WONNA_RAIN = 108;
+    var ANIM_TEXT_I_WONNA_RAIN_OUT = 109;
+    var ANIM_TEXT_CREATE_GAMES_START = 111;
+    var ANIM_TEXT_CREATE_GAMES_HOLD = 112;
+    var ANIM_TEXT_CREATE_GAMES_FINISH = 113;
+    var ANIM_TEXT_SOME_CREATURES_START = 114;
+    var ANIM_TEXT_SOME_CREATURES_HOLD = 115;
+    var ANIM_TEXT_SOME_CREATURES_FINISH = 116;
+    var ANIM_TEXT_CREATE_SOMETHING = 117;
+    var ANIM_TEXT_CREATE_SOMETHING_BEAUTIFUL = 118;
+    var ANIM_TEXT_MAKE_WORLD_BETTER = 119;
+    var ANIM_TEXT_OBJECTS_START = 120;
+    var ANIM_TEXT_OBJECTS_HOLD = 121;
+    var ANIM_TEXT_OBJECTS_FINISH = 122;
+    var ANIM_TEXT_CREATE_WORLDS = 123;
+    var ANIM_TEXT_CREATE_WORLDS_SMALL = 124;
+    var ANIM_TEXT_CREATE_WORLDS_BIG = 125;
+    var ANIM_TEXT_I_CAN_DRAWING = 126;
+    var ANIM_TEXT_I_CAN_MUSIC = 127;
+    var ANIM_TEXT_I_CAN_PROGRAMMING = 128;
+    var ANIM_TEXT_BUT_NOW_I_NEED_A_JOB = 129;
+
+    var ANIM_DRAGON_CREATING = 1001;
+    var ANIM_DRAGON_AFTER_CREATE_STAND = 1002;
+    var ANIM_DRAGON_AFTER_CREATE_LOOK_ON_BALL = 1003;
+    var ANIM_DRAGON_LOOK_ON_BALL_BURN_PLACE = 1004;
+    var ANIM_DRAGON_SMILING = 1005;
+
+    var ANIM_BALL_CREATING = 2001;
+    var ANIM_BALL_STAND = 2002;
+    var ANIM_BALL_ROOLS_TO_DRAGON = 2003;
+
+    var ANIM_PLANT_GROWING = 4001;
+
+    var ANIM_LIGHT_FLOWERS_STAND = 4501;
+
+    var ANIM_BEAUTIFUL_FLOWER = 5001;
+
+    var ANIM_WORLD_XO = 6001;
+
+    var ANIM_WORLD_SNAKE = 6501;
+
+    var ANIM_WORLD_BIG_PENCIL = 7001;
+    var ANIM_WORLD_BIG_COLOR = 7002;
+    var ANIM_WORLD_WOMAN_PENCIL = 7003;
+    var ANIM_WORLD_WOMAN_COLOR = 7004;
+
+    var ANIM_I_CAN_DRAW_EASEL_BURN = 7101;
+    var ANIM_I_CAN_DRAW_EASEL_PAINTING = 7102;
+    var ANIM_I_CAN_DRAW_BRUSH_UP = 7103;
+    var ANIM_I_CAN_DRAW_BRUSH_DOWN = 7104;
+    var ANIM_I_CAN_DRAW_PAINTING = 7105;
+
+    var ANIM_I_CAN_MUSIC_START = 7201;
+    var ANIM_I_CAN_MUSIC_PLAYING = 7202;
+    var ANIM_I_CAN_MUSIC_FINISH = 7203;
+    var ANIM_I_CAN_MUSIC_CDP_BURN = 7204;
+
+	var ANIM_PROGRAMMING_SKILLS = 7500;
+	
+    anims[ANIM_PAUSE] = {imgsPrefix: 'images/textPause', imgsCount: 1};
+    anims[ANIM_STOP] = {imgsPrefix: 'images/textPause', imgsCount: 1};
+
+    anims[ANIM_MAN_LEFT_HAND_UP] = {imgsPrefix: 'images/leftHandUp', imgsCount: 10, offsetX: 0};
+    anims[ANIM_MAN_LEFT_HAND_UP_HELLO] = {imgsPrefix: 'images/leftHandUpHello', imgsCount: 7, offsetX: 0};
+    anims[ANIM_MAN_LEFT_HAND_DOWN] = {imgsPrefix: 'images/leftHandDown', imgsCount: 10, offsetX: 0};
+    anims[ANIM_MAN_TURN_CENTER_TO_RIGHT] = {Vx: 0.4, imgsPrefix: 'images/turnCenterToRight', imgsCount: 8};
+    anims[ANIM_MAN_TURN_RIGHT_TO_CENTER] = {Vx: -0.2, imgsPrefix: 'images/turnRightToCenter', imgsCount: 8};
+    anims[ANIM_MAN_TURN_CENTER_TO_LEFT] = {Vx: -0.4, imgsPrefix: 'images/turnCenterToLeft', imgsCount: 8};
+    anims[ANIM_MAN_TURN_LEFT_TO_CENTER] = {Vx: 0.4, imgsPrefix: 'images/turnLeftToCenter', imgsCount: 8,};
+    anims[ANIM_MAN_GO_RIGHT_START] = {Vx: 2.5 / 2, imgsPrefix: 'images/goRightStart', imgsCount: 4, step: 2};
+    anims[ANIM_MAN_GO_RIGHT] = {Vx: 4 / 2, imgsPrefix: 'images/goRight', imgsCount: 8, step: 2};
+    anims[ANIM_MAN_GO_RIGHT_STOP] = {Vx: 2.5 / 2, imgsPrefix: 'images/goRightStop', imgsCount: 4, step: 2};
+	anims[ANIM_MAN_GO_LEFT_START] = {Vx: -2.5 / 2, imgsPrefix: 'images/goLeftStart', imgsCount: 4, step: 2};
+    anims[ANIM_MAN_GO_LEFT] = {Vx: -4 / 2, imgsPrefix: 'images/goLeft', imgsCount: 8, step: 2};
+    anims[ANIM_MAN_GO_LEFT_STOP] = {Vx: -2.5 / 2, imgsPrefix: 'images/goLeftStop', imgsCount: 4, step: 2};
+    anims[ANIM_MAN_CREATE_DRAGON_START] = {imgsPrefix: 'images/createDragonStart', imgsCount: 4};
+    anims[ANIM_MAN_CREATE_DRAGON] = {imgsPrefix: 'images/createDragon', imgsCount: 16, offsetX: 0};
+    anims[ANIM_MAN_CREATE_DRAGON_STOP] = {imgsPrefix: 'images/createDragonStop', imgsCount: 4, offsetX: 0};
+    anims[ANIM_MAN_CREATE_BALL_START] = {imgsPrefix: 'images/createBallStart', imgsCount: 4, offsetX: 0};
+    anims[ANIM_MAN_CREATE_BALL] = {imgsPrefix: 'images/createBall', imgsCount: 8, offsetX: 0};
+    anims[ANIM_MAN_CREATE_BALL_STOP] = {imgsPrefix: 'images/createBallStop', imgsCount: 4, offsetX: 0};
+    anims[ANIM_MAN_STAND] = {imgsPrefix: 'images/stand', imgsCount: 1, offsetX: 10};
+    anims[ANIM_MAN_STAND_LEFT] = {imgsPrefix: 'images/standLeft', imgsCount: 1, offsetX: 10};
+    anims[ANIM_MAN_STAND_RIGHT] = {imgsPrefix: 'images/standRight', imgsCount: 1, offsetX: 10};
+    anims[ANIM_MAN_GO_DOWN] = {imgsPrefix: 'images/goDown', imgsCount: 8, Vy: 2.5, offsetX: 0};
+    anims[ANIM_MAN_KICK_THE_BALL] = {imgsPrefix: 'images/kickTheBall', imgsCount: 10, offsetX: 0};
+	anims[ANIM_MAN_CAST_LEFT_START] = {imgsPrefix: 'images/manCastLeftStart', imgsCount: 4};
+    anims[ANIM_MAN_CAST_LEFT] = {imgsPrefix: 'images/manCastLeft', imgsCount: 16, offsetX: 0};
+    anims[ANIM_MAN_CAST_LEFT_STOP] = {imgsPrefix: 'images/manCastLeftStop', imgsCount: 4, offsetX: 0};
+
+    anims[ANIM_TEXT_HELLO_START] = {imgsPrefix: 'images/textHelloStart', imgsCount: 5, offsetX: 0};
+    anims[ANIM_TEXT_HELLO_HOLD] = {imgsPrefix: 'images/textHelloHold', imgsCount: 1, offsetX: 0};
+    anims[ANIM_TEXT_HELLO_FINISH] = {imgsPrefix: 'images/textHelloFinish', imgsCount: 4, offsetX: 0};
+    anims[ANIM_TEXT_I_WONNA_CREATE_GAMES_START] = {imgsPrefix: 'images/textIWonnaCreateGamesStart', imgsCount: 5, step: 2};
+    anims[ANIM_TEXT_I_WONNA_CREATE_GAMES_HOLD] = {imgsPrefix: 'images/textIWonnaCreateGamesHold', imgsCount: 8, step: 3};
+    anims[ANIM_TEXT_I_WONNA_CREATE_GAMES_FINISH] = {imgsPrefix: 'images/textIWonnaCreateGamesFinish', imgsCount: 50, step: 2};
+    anims[ANIM_TEXT_I_WONNA_RAIN] = {imgsPrefix: 'images/textIWonnaRain', imgsCount: 3, step: 3};
+    anims[ANIM_TEXT_I_WONNA_RAIN_OUT] = {imgsPrefix: 'images/textIWonnaRainOut', imgsCount: 8, step: 3};
+    anims[ANIM_TEXT_CREATE_GAMES_START] = {imgsPrefix: 'images/textCreateGamesStart', imgsCount: 7};
+    anims[ANIM_TEXT_CREATE_GAMES_HOLD] = {imgsPrefix: 'images/textCreateGamesHold', imgsCount: 1};
+    anims[ANIM_TEXT_CREATE_GAMES_FINISH] = {imgsPrefix: 'images/textCreateGamesFinish', imgsCount: 7};
+    anims[ANIM_TEXT_SOME_CREATURES_START] = {imgsPrefix: 'images/textSomeCreaturesStart', imgsCount: 4};
+    anims[ANIM_TEXT_SOME_CREATURES_HOLD] = {imgsPrefix: 'images/textSomeCreaturesHold', imgsCount: 1};
+    anims[ANIM_TEXT_SOME_CREATURES_FINISH] = {imgsPrefix: 'images/textSomeCreaturesFinish', imgsCount: 4};
+    anims[ANIM_TEXT_CREATE_SOMETHING] = {imgsPrefix: 'images/textCreateSomething', imgsCount: 10, step: 2};
+    anims[ANIM_TEXT_CREATE_SOMETHING_BEAUTIFUL] = {imgsPrefix: 'images/textCreateSomethingBeautiful', imgsCount: 1};
+    anims[ANIM_TEXT_MAKE_WORLD_BETTER] = {imgsPrefix: 'images/textMakeWorldBetter', imgsCount: 19, step: 2};
+    anims[ANIM_TEXT_OBJECTS_START] = {imgsPrefix: 'images/textObjectsStart', imgsCount: 4};
+    anims[ANIM_TEXT_OBJECTS_HOLD] = {imgsPrefix: 'images/textObjectsHold', imgsCount: 1};
+    anims[ANIM_TEXT_OBJECTS_FINISH] = {imgsPrefix: 'images/textObjectsFinish', imgsCount: 4};
+    anims[ANIM_TEXT_CREATE_WORLDS] = {imgsPrefix: 'images/textCreateWorlds', imgsCount: 16, step: 2};
+    anims[ANIM_TEXT_CREATE_WORLDS_SMALL] = {imgsPrefix: 'images/textCreateWorldsSmall', imgsCount: 15, step: 2};
+    anims[ANIM_TEXT_CREATE_WORLDS_BIG] = {imgsPrefix: 'images/textCreateWorldsBig', imgsCount: 13, step: 2};
+    anims[ANIM_TEXT_I_CAN_DRAWING] = {imgsPrefix: 'images/textICanDrawing', imgsCount: 16, step: 2};
+    anims[ANIM_TEXT_I_CAN_MUSIC] = {imgsPrefix: 'images/textICanMusic', imgsCount: 18, step: 2};
+    anims[ANIM_TEXT_I_CAN_PROGRAMMING] = {imgsPrefix: 'images/textICanProgramming', imgsCount: 21, step: 2};
+    anims[ANIM_TEXT_BUT_NOW_I_NEED_A_JOB] = {imgsPrefix: 'images/textButNowINeedAJob', imgsCount: 1, step: 2};
+    // 24 januarys ? 24 April 3 full months
+
+    anims[ANIM_DRAGON_CREATING] = {imgsPrefix: 'images/dragonCreating', imgsCount: 20, offsetX: 0};
+    anims[ANIM_DRAGON_AFTER_CREATE_STAND] = {imgsPrefix: 'images/dragonAfterCreateStand', imgsCount: 1};
+    anims[ANIM_DRAGON_AFTER_CREATE_LOOK_ON_BALL] = {imgsPrefix: 'images/dragonAfterCreateLookOnBall', imgsCount: 8};
+    anims[ANIM_DRAGON_SMILING] = {imgsPrefix: 'images/dragonSmiling', imgsCount: 12, offsetX: 0};
+    anims[ANIM_DRAGON_LOOK_ON_BALL_BURN_PLACE] = {imgsPrefix: 'images/dragonLookOnBallBurnPlace', imgsCount: 1};
+
+    anims[ANIM_BALL_CREATING] = {imgsPrefix: 'images/ballCreating', imgsCount: 13, offsetX: 0};
+    anims[ANIM_BALL_STAND] = {imgsPrefix: 'images/ballStand', imgsCount: 1, offsetX: 0};
+    anims[ANIM_BALL_ROOLS_TO_DRAGON] = {imgsPrefix: 'images/ballRoolsToDragon', imgsCount: 8, offsetX: 62, offsetY: 54};
+
+    anims[ANIM_PLANT_GROWING] = {imgsPrefix: 'images/textIWonnaPlantGrow', imgsCount: 22, step: 3};
+    anims[ANIM_LIGHT_FLOWERS_STAND] = {imgsPrefix: 'images/lightFlowersStand', imgsCount: 1, step: 1};
+    anims[ANIM_BEAUTIFUL_FLOWER] = {imgsPrefix: 'images/beautifulFlower', imgsCount: 81, step: 2};
+
+    anims[ANIM_WORLD_XO] = {imgsPrefix: 'images/worldXO', imgsCount: 12, step: 7, offsetX: 0};
+    anims[ANIM_WORLD_SNAKE] = {imgsPrefix: 'images/worldSnake', imgsCount: 85, step: 2, offsetX: 0};
+
+    anims[ANIM_WORLD_BIG_PENCIL] = {imgsPrefix: 'images/worldsBig', imgsCount: 92, step: 1, offsetX: 0};
+    anims[ANIM_WORLD_BIG_COLOR] = {imgsPrefix: 'images/worldBigColor', imgsCount: 32, step: 3, offsetX: 0};
+    anims[ANIM_WORLD_WOMAN_PENCIL] = {imgsPrefix: 'images/worldWoman', imgsCount: 68, step: 1, offsetX: 0};
+    anims[ANIM_WORLD_WOMAN_COLOR] = {imgsPrefix: 'images/worldWomanColor', imgsCount: 54, step: 3};
+
+    anims[ANIM_I_CAN_DRAW_EASEL_BURN] = {imgsPrefix: 'images/easelBurn', imgsCount: 8, step: 2, offsetX: 0};
+    anims[ANIM_I_CAN_DRAW_EASEL_PAINTING] = {imgsPrefix: 'images/easel_drawing', imgsCount: 12, step: 4};
+    anims[ANIM_I_CAN_DRAW_BRUSH_UP] = {imgsPrefix: 'images/iCanDrawBrushUp', imgsCount: 8, step: 2, offsetX: -42, offsetY: 10};
+    anims[ANIM_I_CAN_DRAW_BRUSH_DOWN] = {imgsPrefix: 'images/iCanDrawBrushDown', imgsCount: 8, step: 2, offsetX: -42, offsetY: 10};
+    anims[ANIM_I_CAN_DRAW_PAINTING] = {imgsPrefix: 'images/iCanDrawPainting', imgsCount: 5, step: 3, offsetX: -42, offsetY: 10};
+
+    anims[ANIM_I_CAN_MUSIC_START] = {imgsPrefix: 'images/iCanMusicStart', imgsCount: 4, step: 3, offsetX: -44, offsetY: 8};
+    anims[ANIM_I_CAN_MUSIC_PLAYING] = {imgsPrefix: 'images/iCanMusicPlaying', imgsCount: 4, step: 3, offsetX: -44, offsetY: 8};
+    anims[ANIM_I_CAN_MUSIC_FINISH] = {imgsPrefix: 'images/iCanMusicFinish', imgsCount: 4, step: 3, offsetX: -44, offsetY: 8};
+    anims[ANIM_I_CAN_MUSIC_CDP_BURN] = {imgsPrefix: 'images/iCanMusicCDPBurn', imgsCount: 11, step: 2, offsetX: 0, offsetY: 0};
+	
+	anims[ANIM_PROGRAMMING_SKILLS] = {imgsPrefix: 'images/programmingSkills', imgsCount: 49, step:8};
+
+
+    var manType = [];
+    var textType = [];
+    var dragonType = [];
+    var ballType = [];
+    var plantType = [];
+    var lightFlowersType = [];
+    var beautifulFlowerType = [];
+    var worldXOType = [];
+    var worldSnakeType = [];
+    var worldBigType = [];
+    var worldWomanType = [];
+    var easelType = [];
+    var easelPaintingType = [];
+    var CDPType = [];
+    var cloudsType = [];
+	var programmingSkillsType = [];
+
+    /* go from left */
+    manType.push({id: ANIM_MAN_GO_RIGHT, repeat: 5, x: -90, y: 200});
+    manType.push({id: ANIM_MAN_GO_RIGHT_STOP});
+    /* say hello */	
+    manType.push({id: ANIM_MAN_TURN_RIGHT_TO_CENTER});
+	textType.push({id: ANIM_PAUSE, repeat: 105});
+    textType.push({id: ANIM_TEXT_HELLO_START, repeat: 1, x: 88, y: 128, Vx: 0.2, Vy: -0.4});
+	textType.push({id: ANIM_TEXT_HELLO_HOLD, repeat: 45, Vx: 0.5, Vy: -0.1});
+    textType.push({id: ANIM_TEXT_HELLO_FINISH, repeat: 1, Vx: 0.1, Vy: -0.1});
+    manType.push({id: ANIM_MAN_LEFT_HAND_UP});
+    manType.push({id: ANIM_MAN_LEFT_HAND_UP_HELLO, repeat: 2});
+    manType.push({id: ANIM_MAN_LEFT_HAND_DOWN});
+    /* go next */
+    manType.push({id: ANIM_MAN_TURN_CENTER_TO_RIGHT});
+    manType.push({id: ANIM_MAN_GO_RIGHT_START});
+    manType.push({id: ANIM_MAN_GO_RIGHT, repeat: 3 + 3 + 2 + 2});
+    manType.push({id: ANIM_MAN_GO_RIGHT_STOP});
+
+    /* look on plant rain */
+    manType.push({id: ANIM_MAN_TURN_CENTER_TO_LEFT});
+    manType.push({id: ANIM_MAN_STAND_LEFT, repeat: 380});
+    manType.push({id: ANIM_MAN_TURN_LEFT_TO_CENTER});
+    manType.push({id: ANIM_MAN_STAND, repeat: 100});
+    /* create dragon */
+    manType.push({id: ANIM_MAN_CREATE_DRAGON_START});
+    manType.push({id: ANIM_MAN_CREATE_DRAGON, repeat: 2});
+    manType.push({id: ANIM_MAN_CREATE_DRAGON_STOP});
+    manType.push({id: ANIM_MAN_STAND, repeat: 20});
+    /* create ball */
+    manType.push({id: ANIM_MAN_CREATE_BALL_START});
+    manType.push({id: ANIM_MAN_CREATE_BALL, repeat: 4});
+    manType.push({id: ANIM_MAN_CREATE_BALL_STOP});
+    manType.push({id: ANIM_MAN_STAND, repeat: 25});
+    /* go down */
+    manType.push({id: ANIM_MAN_GO_DOWN, repeat: 5, Vx: -0.30});
+    manType.push({id: ANIM_MAN_TURN_CENTER_TO_RIGHT});
+    /* kick the ball */
+    manType.push({id: ANIM_MAN_KICK_THE_BALL});
+    manType.push({id: ANIM_MAN_TURN_RIGHT_TO_CENTER});
+    manType.push({id: ANIM_MAN_STAND, repeat: 20});
+    /* go down to make world better */
+    manType.push({id: ANIM_MAN_GO_DOWN, repeat: 1, Vx: -0.30});
+    manType.push({id: ANIM_MAN_STAND, repeat: 50});
+    /* make beautiful flower */
+    manType.push({id: ANIM_MAN_CAST_LEFT_START});
+    manType.push({id: ANIM_MAN_CAST_LEFT, repeat: 11});
+    manType.push({id: ANIM_MAN_CAST_LEFT_STOP});
+
+    /* big pause, drawing big world */
+    manType.push({id: ANIM_MAN_STAND, repeat: 900});
+
+    manType.push({id: ANIM_MAN_TURN_CENTER_TO_LEFT});
+    manType.push({id: ANIM_MAN_GO_LEFT_START, repeat:1});
+    manType.push({id: ANIM_MAN_GO_LEFT, repeat: 2});
+    manType.push({id: ANIM_MAN_GO_LEFT_STOP});
+
+    /* drawing */
+    manType.push({id: ANIM_MAN_STAND, repeat: 95});
+    manType.push({id: ANIM_MAN_TURN_CENTER_TO_LEFT});
+    manType.push({id: ANIM_STOP, repeat: 35});
+    manType.push({id: ANIM_I_CAN_DRAW_BRUSH_UP});
+    manType.push({id: ANIM_STOP, repeat: 22});
+    manType.push({id: ANIM_I_CAN_DRAW_PAINTING, repeat: 5});
+    manType.push({id: ANIM_I_CAN_DRAW_BRUSH_DOWN});
+    /* making music */
+    manType.push({id: ANIM_MAN_TURN_LEFT_TO_CENTER});
+    manType.push({id: ANIM_MAN_STAND, repeat: 80});
+    manType.push({id: ANIM_MAN_TURN_CENTER_TO_RIGHT});
+    manType.push({id: ANIM_STOP, repeat: 10});
+    manType.push({id: ANIM_I_CAN_MUSIC_START});
+    manType.push({id: ANIM_STOP, repeat: 30});
+    manType.push({id: ANIM_I_CAN_MUSIC_PLAYING, repeat: 5});
+    manType.push({id: ANIM_I_CAN_MUSIC_FINISH});
+    manType.push({id: ANIM_MAN_STAND_RIGHT});
+
+    manType.push({id: ANIM_MAN_TURN_RIGHT_TO_CENTER});
+
+    textType.push({id: ANIM_PAUSE, repeat: 305});
+    /* create something... */
+    textType.push({id: ANIM_TEXT_CREATE_SOMETHING, x: 300, y: 158});
+    textType.push({id: ANIM_STOP, repeat: 55});
+    textType.push({id: ANIM_PAUSE, repeat: 1});
+    /* something beaufiful */
+    textType.push({id: ANIM_TEXT_CREATE_SOMETHING_BEAUTIFUL, x: 310, y: 183});
+    textType.push({id: ANIM_STOP, repeat: 100});
+    /* pause before create games like! */
+    textType.push({id: ANIM_PAUSE, repeat: 86});
+    textType.push({id: ANIM_TEXT_CREATE_GAMES_START, repeat: 1, x: 158, y: 55, Vx: 0.2, Vy: -0.4});
+    textType.push({id: ANIM_TEXT_CREATE_GAMES_HOLD, repeat: 45, Vx: 0.0, Vy: 0.1});
+    textType.push({id: ANIM_TEXT_CREATE_GAMES_FINISH, repeat: 1, Vx: 0.1, Vy: -0.1});
+    textType.push({id: ANIM_PAUSE, repeat: 12});
+    /* create some creatures */
+    textType.push({id: ANIM_TEXT_SOME_CREATURES_START, repeat: 1, x: 555, y: 20, Vx: 0.0, Vy: +0.3});
+    textType.push({id: ANIM_TEXT_SOME_CREATURES_HOLD, repeat: 40, Vx: 0.0, Vy: +0.25});
+    textType.push({id: ANIM_TEXT_SOME_CREATURES_FINISH, repeat: 1, Vx: 0.0, Vy: +0.12});
+    /* create objects */
+    textType.push({id: ANIM_PAUSE, repeat: 50});
+    textType.push({id: ANIM_TEXT_OBJECTS_START, repeat: 1, x: 535, y: 310})
+    textType.push({id: ANIM_TEXT_OBJECTS_HOLD, repeat: 39, Vx: -0.25})
+    textType.push({id: ANIM_TEXT_OBJECTS_FINISH, repeat: 1, Vx: -0.12})
+    /* make world better! */
+    textType.push({id: ANIM_PAUSE, repeat: 90});
+    textType.push({id: ANIM_TEXT_MAKE_WORLD_BETTER, repeat: 1, x: 221 + 25, y: 250});
+    textType.push({id: ANIM_STOP, repeat: 170});
+    /* create worlds... */
+    textType.push({id: ANIM_PAUSE, repeat: 30});
+    textType.push({id: ANIM_TEXT_CREATE_WORLDS, repeat: 1, x: 221 + 50, y: 250});
+    textType.push({id: ANIM_STOP, repeat: 50});
+    /* ...small... */
+    textType.push({id: ANIM_PAUSE, repeat: 3});
+    textType.push({id: ANIM_TEXT_CREATE_WORLDS_SMALL, repeat: 1, x: 221 + 40, y: 265});
+    textType.push({id: ANIM_STOP, repeat: 85});
+    /* ...small again... */
+    textType.push({id: ANIM_PAUSE, repeat: 25});
+    textType.push({id: ANIM_TEXT_CREATE_WORLDS_SMALL, repeat: 1, x: 221 + 40, y: 280}); //1 - 30
+    textType.push({id: ANIM_STOP, repeat: 157});
+    /* ...big... */
+    textType.push({id: ANIM_PAUSE, repeat: 40});
+    textType.push({id: ANIM_TEXT_CREATE_WORLDS_BIG, repeat: 1, x: 221 + 50, y: 300});
+    textType.push({id: ANIM_STOP, repeat: 200});
+    textType.push({id: ANIM_PAUSE, repeat: 200});
+    /* i can drawing */
+    textType.push({id: ANIM_PAUSE, repeat: 70});
+    textType.push({id: ANIM_TEXT_I_CAN_DRAWING, repeat: 1, x: 255, y: 280});
+    textType.push({id: ANIM_STOP, repeat: 50});
+    /* i can make music */
+    textType.push({id: ANIM_PAUSE, repeat: 140+80});
+    textType.push({id: ANIM_TEXT_I_CAN_MUSIC, repeat: 1, x: 255, y: 280});
+    textType.push({id: ANIM_STOP, repeat: 50});
+    /* i can programming */
+    textType.push({id: ANIM_PAUSE, repeat: 170});
+    textType.push({id: ANIM_TEXT_I_CAN_PROGRAMMING, repeat: 1, x: 255, y: 280});
+    textType.push({id: ANIM_STOP, repeat: 50});
+    /* but now I need a job */
+    textType.push({id: ANIM_PAUSE, repeat: 30});
+    textType.push({id: ANIM_TEXT_BUT_NOW_I_NEED_A_JOB, repeat: 1, x: 250, y: 270});
+    textType.push({id: ANIM_STOP, repeat: 1500});
+
+    textType.push({id: ANIM_PAUSE, repeat: 10});
+
+    /* clouds */
+    cloudsType.push({id: ANIM_PAUSE, repeat: 300});
+    cloudsType.push({id: ANIM_TEXT_I_WONNA_CREATE_GAMES_START, repeat: 1, x: 50, y: 62, Vx: -0.2, Vy: -0.3});
+    cloudsType.push({id: ANIM_STOP, repeat: 110, Vx: -0.2, Vy: -0.3});
+    cloudsType.push({id: ANIM_TEXT_I_WONNA_CREATE_GAMES_HOLD, repeat: 1, Vx: -0.2, Vy: -0.3});
+    cloudsType.push({id: ANIM_STOP, repeat: 10});
+    cloudsType.push({id: ANIM_TEXT_I_WONNA_CREATE_GAMES_FINISH, repeat: 1, Vx: -0.1, Vy: -0.1});
+    cloudsType.push({id: ANIM_TEXT_I_WONNA_RAIN, repeat: 4, Vx: -0.1, Vy: -0.01});
+    cloudsType.push({id: ANIM_TEXT_I_WONNA_RAIN_OUT, Vx: -0.1, Vy: -0.01});
+    cloudsType.push({id: ANIM_PAUSE});
+
+    dragonType.push({id: ANIM_PAUSE, repeat: 830});
+    dragonType.push({id: ANIM_DRAGON_CREATING, repeat: 1, x: 550, y: 148});
+    dragonType.push({id: ANIM_DRAGON_AFTER_CREATE_STAND, repeat: 57});
+    dragonType.push({id: ANIM_DRAGON_AFTER_CREATE_LOOK_ON_BALL});
+    dragonType.push({id: ANIM_DRAGON_LOOK_ON_BALL_BURN_PLACE, repeat: 78});
+    dragonType.push({id: ANIM_DRAGON_SMILING, repeat: 1});
+
+    ballType.push({id: ANIM_PAUSE, repeat: 910});
+    ballType.push({id: ANIM_BALL_CREATING, repeat: 1, x: 395, y: 275});
+    ballType.push({id: ANIM_BALL_STAND, repeat: 65});
+    ballType.push({id: ANIM_BALL_ROOLS_TO_DRAGON, repeat: 2, Vx: 14.4 / 2, Vy: -10.2 / 2});
+    ballType.push({id: ANIM_BALL_STAND, repeat: 65});
+
+    plantType.push({id: ANIM_PAUSE, repeat: 614, x: 20, y: 258});
+    plantType.push({id: ANIM_PLANT_GROWING});
+
+    lightFlowersType.push({id: ANIM_PAUSE, repeat: 1020, x: 120, y: 400});
+    lightFlowersType.push({id: ANIM_LIGHT_FLOWERS_STAND});
+
+    beautifulFlowerType.push({id: ANIM_PAUSE, repeat: 1100, x: 130, y: 365});
+    beautifulFlowerType.push({id: ANIM_BEAUTIFUL_FLOWER});
+
+    worldXOType.push({id: ANIM_PAUSE, repeat: 1400, x: 310, y: 390});
+    worldXOType.push({id: ANIM_WORLD_XO});
+
+    worldSnakeType.push({id: ANIM_PAUSE, repeat: 1540, x: 475, y: 400});
+    worldSnakeType.push({id: ANIM_WORLD_SNAKE});
+
+    worldBigType.push({id: ANIM_PAUSE, repeat: 1760, x: 540, y: 1});
+    worldBigType.push({id: ANIM_WORLD_BIG_PENCIL});
+    worldBigType.push({id: ANIM_STOP, repeat: 100});
+    worldBigType.push({id: ANIM_WORLD_BIG_COLOR});
+
+    worldWomanType.push({id: ANIM_PAUSE, repeat: 1860, x: 100, y: 1});
+    worldWomanType.push({id: ANIM_WORLD_WOMAN_PENCIL});
+    worldWomanType.push({id: ANIM_STOP, repeat: 130});
+    worldWomanType.push({id: ANIM_WORLD_WOMAN_COLOR});
+
+    easelType.push({id: ANIM_PAUSE, repeat: 2300, x: 285, y: 335});
+    easelType.push({id: ANIM_I_CAN_DRAW_EASEL_BURN});
+
+    easelPaintingType.push({id: ANIM_PAUSE, repeat: 2403, x: 285, y: 335});
+    easelPaintingType.push({id: ANIM_I_CAN_DRAW_EASEL_PAINTING});
+
+    CDPType.push({id: ANIM_PAUSE, repeat: 2580, x: 275, y: 335});
+    CDPType.push({id: ANIM_I_CAN_MUSIC_CDP_BURN, repeat: 1});
+
+	programmingSkillsType.push({id: ANIM_PAUSE, repeat: 2950, x: 130, y:50});
+	programmingSkillsType.push({id: ANIM_PROGRAMMING_SKILLS, repeat: 1});
+	
+	
+    var man = null;
+    var text = null;
+    var dragon = null;
+    var ball = null;
+    var plant = null;
+    var lightFlowers = null;
+    var beautifulFlower = null;
+    var worldXO = null;
+    var worldSnake = null;
+    var worldBig = null;
+    var worldWoman = null;
+    var easel = null;
+    var easelPainting = null;
+    var CDP = null;
+    var clouds = null;
+	var programmingSkills = null;
+
+    var init = function (params) {
+
+        Canvas.loadAnims(anims, self.go);
+
+        text = Canvas.createSprite();
+        plant = Canvas.createSprite();
+        lightFlowers = Canvas.createSprite();
+        beautifulFlower = Canvas.createSprite();
+        worldXO = Canvas.createSprite();
+        worldSnake = Canvas.createSprite();
+        worldBig = Canvas.createSprite();
+        worldWoman = Canvas.createSprite();
+        easel = Canvas.createSprite();
+        CDP = Canvas.createSprite();
+        dragon = Canvas.createSprite();
+        ball = Canvas.createSprite();
+        clouds = Canvas.createSprite();
+        easel = Canvas.createSprite();
+        easelPainting = Canvas.createSprite();
+        CDP = Canvas.createSprite();
+        man = Canvas.createSprite();
+		programmingSkills = Canvas.createSprite();
+    };
+
+    this.go = function () {
+        man.animate(manType);
+        text.animate(textType);
+        dragon.animate(dragonType);
+        ball.animate(ballType);
+        plant.animate(plantType);
+        lightFlowers.animate(lightFlowersType);
+        beautifulFlower.animate(beautifulFlowerType);
+        worldXO.animate(worldXOType);
+        worldSnake.animate(worldSnakeType);
+        worldBig.animate(worldBigType);
+        worldWoman.animate(worldWomanType);
+        clouds.animate(cloudsType);
+        easel.animate(easelType);
+        easelPainting.animate(easelPaintingType);
+        CDP.animate(CDPType);
+		programmingSkills.animate(programmingSkillsType);
+        var startOn = parseInt(window.location.href.substr(window.location.href.search('startOn') + 8, 4));
+        Canvas.stopOn(5200);
+        Canvas.startOn(startOn);
+    };
+
+    init(params);
+};
+
+</script ><canvas id = 'myCanvas' width = '1000' height = '1000' ></canvas>
